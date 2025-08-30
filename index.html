@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Primer-Style Simulation</title>
+<style>
+  body {
+    margin: 0; 
+    background: #111; 
+    color: white; 
+    font-family: sans-serif;
+    display: flex; 
+    flex-direction: column; 
+    align-items: center;
+  }
+  canvas {
+    margin-top: 10px;
+  }
+  #sim { border:2px solid #444; background:#222; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<h1>Primer-Style Simulation</h1>
+<canvas id="sim" width="600" height="400"></canvas>
+<canvas id="chart" width="600" height="200"></canvas>
+<script>
+const canvas = document.getElementById("sim");
+const ctx = canvas.getContext("2d");
+
+class Blob {
+  constructor(x, y, infected=false) {
+    this.x = x;
+    this.y = y;
+    this.vx = Math.random()*2 - 1;
+    this.vy = Math.random()*2 - 1;
+    this.state = infected ? "infected" : "healthy"; 
+    this.timer = 0; // counts frames in current state
+    this.buildings = [];
+  }
+
+  chooseBuildings(buildings) {
+    this.buildings = [];
+    while(this.buildings.length < 2) {
+      let b = buildings[Math.floor(Math.random()*buildings.length)];
+      if(!this.buildings.includes(b)) this.buildings.push(b);
+    }
+  }
+
+  update() {
+    // move
+    this.x += this.vx;
+    this.y += this.vy;
+    if(this.x<0||this.x>canvas.width) this.vx *= -1;
+    if(this.y<0||this.y>canvas.height) this.vy *= -1;
+
+    // state timers
+    this.timer++;
+    if(this.state==="infected" && this.timer > 1500) { // 5 days
+      this.state = "immune";
+      this.timer = 0;
+    } else if(this.state==="immune" && this.timer > 900) { // 3 days
+      this.state = "healthy";
+      this.timer = 0;
+    }
+  }
+
+  draw() {
+    if(this.state === "healthy") ctx.fillStyle = "lime";
+    if(this.state === "infected") ctx.fillStyle = "red";
+    if(this.state === "immune") ctx.fillStyle = "blue";
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 6, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+class Building {
+  constructor(x,y) { this.x=x; this.y=y; }
+  draw() {
+    ctx.fillStyle = "orange";
+    ctx.fillRect(this.x-10,this.y-10,20,20);
+  }
+}
+
+// setup
+let buildings=[];
+for(let i=0;i<6;i++){
+  buildings.push(new Building(80+ i*80, 200));
+}
+
+let blobs = [];
+let N = 60;
+for(let i=0;i<N;i++) {
+  let infected = Math.random() < 0.05;
+  blobs.push(new Blob(Math.random()*canvas.width, Math.random()*canvas.height, infected));
+}
+
+let frames=0;
+
+// infection simulation per "day"
+function simulateDay() {
+  for(let b of blobs) b.chooseBuildings(buildings);
+  for(let building of buildings) {
+    let visitors = blobs.filter(b=>b.buildings.includes(building));
+    let infectedPresent = visitors.some(v=>v.state==="infected");
+    if(infectedPresent){
+      for(let v of visitors) {
+        if(v.state==="healthy" && Math.random()<0.01) { // 1% chance
+          v.state="infected";
+          v.timer=0;
+        }
+      }
+    }
+  }
+}
+
+// chart
+const chartCtx = document.getElementById("chart").getContext("2d");
+const simChart = new Chart(chartCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label:"Healthy", data:[], borderColor:"lime", fill:false },
+      { label:"Infected", data:[], borderColor:"red", fill:false },
+      { label:"Immune", data:[], borderColor:"blue", fill:false }
+    ]
+  },
+  options: {
+    responsive:false,
+    scales: { y: { beginAtZero:true, max:N } }
+  }
+});
+
+function updateChart(day) {
+  let healthy = blobs.filter(b=>b.state==="healthy").length;
+  let infected = blobs.filter(b=>b.state==="infected").length;
+  let immune = blobs.filter(b=>b.state==="immune").length;
+  simChart.data.labels.push(day);
+  simChart.data.datasets[0].data.push(healthy);
+  simChart.data.datasets[1].data.push(infected);
+  simChart.data.datasets[2].data.push(immune);
+  simChart.update();
+}
+
+// loop
+function loop() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let b of buildings) b.draw();
+  for(let b of blobs) { b.update(); b.draw(); }
+
+  frames++;
+  if(frames % 300 === 0) { // 1 "day"
+    simulateDay();
+    updateChart(frames/300);
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
